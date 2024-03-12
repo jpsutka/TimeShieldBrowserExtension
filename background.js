@@ -1,51 +1,129 @@
-// background.js
-
-// Initialize an object to store the visited websites and their visit counts
+// List of most used websites
 let visitedWebsites = {};
 
+// Tncrement seconds condition
+let condition = true;
+
+let websocket = null;
+
+
 // Load the previously stored visited websites data from storage
-chrome.storage.local.get('visitedWebsites', (result) => {
-    if (result.visitedWebsites) {
-        visitedWebsites = result.visitedWebsites;
+function loadVisitedWebsites() {
+    chrome.storage.local.get('visitedWebsites', (result) => {
+        if (result.visitedWebsites) {
+            visitedWebsites = result.visitedWebsites;
+        }
+    });
+}
+
+// Update the storage with the latest visited websites data
+function updateStorage() {
+    chrome.storage.local.set({ 'visitedWebsites': visitedWebsites });
+}
+
+// Update time spent for a given website
+function updateTimeSpent(websiteName, timeSpent) {
+    if (visitedWebsites.hasOwnProperty(websiteName)) {
+
+        visitedWebsites[websiteName] += timeSpent;
+    } else {
+        visitedWebsites[websiteName] = timeSpent;
+    }
+    updateStorage();
+}
+
+
+// Listener for tab activation
+chrome.tabs.onActivated.addListener((activeInfo) => {
+    chrome.tabs.get(activeInfo.tabId, (tab) => {
+        tabHandler(tab);
+    });
+});
+
+// Listener for tab Update
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (tab.active && changeInfo.url) {
+        tabHandler(tab);
     }
 });
 
-//init web socket
-websocket = new WebSocket('ws://localhost:8080');
+// Determines the current website you are on and passes that to the timer
+async function tabHandler(tabName) {
+    // Reset timer condition
+    condition = false;
 
-// Listen for the onUpdated event which is fired when a tab is updated
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    // Check if the tab is fully loaded
-    if (changeInfo.status === 'complete') {
-        // Get the URL of the tab
-        let url = new URL(tab.url);
-        if (url.hostname != "newtab") {
+    // Sleep for two seconds to let the timer stop
+    await new Promise(resolve => setTimeout(resolve, 2000)); // Sleep 2 sec
 
-            websocket.send(url.hostname);
+    if (chrome.runtime.lastError) {
+        // Handle potential errors when accessing tab information
+        console.error(chrome.runtime.lastError.message);
+        return;
+    }
+    if (!tabName.url.startsWith("http")) return; // Ignore non-web pages
 
-            // Increment the visit count for the visited website
-            if (url.hostname in visitedWebsites) {
-                visitedWebsites[url.hostname]++;
-            } else {
-                visitedWebsites[url.hostname] = 1;
-            }  
+    const url = new URL(tabName.url);
+    const websiteName = url.hostname;
 
-            // Store the updated visited websites data
-            chrome.storage.local.set({ 'visitedWebsites': visitedWebsites });
+    // I want to updateTimeSpent() every second a tab is open
+
+    //updateTimeSpent(websiteName, 1);
+    condition = true;
+    timer(websiteName);
+
+}
+
+// Timer for how long you've spent on a website
+async function timer(websiteName) {
+    while (condition) {
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Sleep 1 sec
+        updateTimeSpent(websiteName, 1);
+    }
+}
+
+// Messaging system for extension
+async function startMessager() {
+    while (true) {
+        if (websocket === null){
+            // Init web socket
+            websocket = new WebSocket('ws://localhost:8080');
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 5000)); // Sleep 5 sec
+
+        if (websocket.readyState === WebSocket.OPEN) {
+            
+            let entries = Object.entries(visitedWebsites);
+            entries.sort((a, b) => b[1] - a[1]);
+            let topFiveEntries = entries.slice(0, 5);
+            let topFiveWebsites = Object.fromEntries(topFiveEntries);
+
+            // Convert the visitedWebsites object into a JSON string
+            let visitedWebsitesString = JSON.stringify(topFiveWebsites);
+            websocket.send(visitedWebsitesString);
+        }
+        else{
+            // Init web socket
+            websocket = new WebSocket('ws://localhost:8080');
         }
     }
-});
+}
 
-// Listen for the onInstalled event which is fired when the extension is first installed
+// Reset storage on extension installation or update
 chrome.runtime.onInstalled.addListener(() => {
-    // Clear the visited websites data when the extension is installed
     chrome.storage.local.set({ 'visitedWebsites': {} });
+    loadVisitedWebsites();
 });
 
-// Listen for messages from the popup.js script
+// Respond to messages from popup.js or other parts of the extension
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    // Send the visited websites data to the popup.js script when requested
     if (message === 'getVisitedWebsites') {
         sendResponse(visitedWebsites);
     }
 });
+
+// Initial load of stored data
+loadVisitedWebsites();
+
+// Start messaging the client
+startMessager();

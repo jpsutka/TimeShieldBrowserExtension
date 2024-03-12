@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const list = document.getElementById('visited-websites');
         sortedWebsites.slice(0, 5).forEach(([website, count]) => {
             const listItem = document.createElement('li');
-            listItem.textContent = `${website} (${count} visits)`;
+            listItem.textContent = `${website} (${(count / 60).toFixed(1)} Minutes)`;
             list.appendChild(listItem);
         });
     });
