@@ -20,9 +20,19 @@ function loadVisitedWebsites() {
     });
 }
 
+// Load the previously stored blocked websites data from storage
+function loadBlockedWebsites() {
+    chrome.storage.local.get('blockedWebsites', (result) => {
+        if (result.blockedWebsites) {
+            blockedWebsites = result.blockedWebsites;
+        }
+    });
+}
+
 // Update the storage with the latest visited websites data
-function updateStorage() {
+function UpdateStorage() {
     chrome.storage.local.set({ 'visitedWebsites': visitedWebsites });
+    chrome.storage.local.set({ 'blockedWebsites': blockedWebsites });
 }
 
 // Update time spent for a given website
@@ -33,7 +43,9 @@ function updateTimeSpent(websiteName, timeSpent) {
     } else {
         visitedWebsites[websiteName] = timeSpent;
     }
-    updateStorage();
+
+    // Update storage
+    UpdateStorage();
 }
 
 
@@ -71,14 +83,6 @@ async function tabHandler(tabName, tabId) {
 
     if (websiteName === "www.time-shield.com") return; // White list the time-shield page
 
-    /*blockedWebsites.forEach((part) => {
-        if (part === websiteName){
-            // Redirect to www.time-shield.com/blocked.html
-            chrome.tabs.update(tabId, {url: "https://www.time-shield.com/blocked.html"});
-            return;
-        }
-    }); */
-
     Object.keys(blockedWebsites).forEach((value) => {
         console.log(value); // Log the key
         if (websiteName === value){
@@ -86,6 +90,10 @@ async function tabHandler(tabName, tabId) {
             return;
         }
     });
+
+    // Update local storage
+    UpdateStorage();
+
 
     condition = true;
     timer(websiteName);
@@ -97,8 +105,6 @@ async function timer(websiteName) {
     while (condition) {
         await new Promise(resolve => setTimeout(resolve, 1000)); // Sleep 1 sec
         updateTimeSpent(websiteName, 1);
-
-
     }
 }
 
@@ -143,7 +149,14 @@ async function startMessager() {
 chrome.runtime.onInstalled.addListener(() => {
     chrome.storage.local.set({ 'visitedWebsites': {} });
     loadVisitedWebsites();
+
+    chrome.storage.local.set({ 'blockedWebsites': {} });
+    loadBlockedWebsites();
 });
+
+// Initial load of stored data
+loadVisitedWebsites();
+loadBlockedWebsites();
 
 // Respond to messages from popup.js or other parts of the extension
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -154,11 +167,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse(blockedWebsites);
     }
 });
-
-
-
-// Initial load of stored data
-loadVisitedWebsites();
 
 // Start messaging the client
 startMessager();
