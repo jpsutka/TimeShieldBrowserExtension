@@ -105,12 +105,18 @@ async function timer(websiteName) {
     while (condition) {
         await new Promise(resolve => setTimeout(resolve, 1000)); // Sleep 1 sec
         updateTimeSpent(websiteName, 1);
+
+        // Update local storage
+        UpdateStorage();
     }
 }
 
 // Messaging system for extension
 async function startMessager() {
     while (true) {
+        // Update local storage
+        UpdateStorage();
+        
         if (websocket === null || websocket.readyState === WebSocket.CLOSED) {
             websocket = new WebSocket('ws://localhost:8080');
         }
