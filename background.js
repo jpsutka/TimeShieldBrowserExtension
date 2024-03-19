@@ -1,9 +1,13 @@
 // List of most used websites
 let visitedWebsites = {};
 
+// List of blocked websites
+let blockedWebsites = {};
+
 // Tncrement seconds condition
 let condition = true;
 
+// Websocket
 let websocket = null;
 
 
@@ -43,12 +47,12 @@ chrome.tabs.onActivated.addListener((activeInfo) => {
 // Listener for tab Update
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (tab.active && changeInfo.url) {
-        tabHandler(tab);
+        tabHandler(tab, tabId);
     }
 });
 
 // Determines the current website you are on and passes that to the timer
-async function tabHandler(tabName) {
+async function tabHandler(tabName, tabId) {
     // Reset timer condition
     condition = false;
 
@@ -65,9 +69,24 @@ async function tabHandler(tabName) {
     const url = new URL(tabName.url);
     const websiteName = url.hostname;
 
-    // I want to updateTimeSpent() every second a tab is open
+    if (websiteName === "www.time-shield.com") return; // White list the time-shield page
 
-    //updateTimeSpent(websiteName, 1);
+    /*blockedWebsites.forEach((part) => {
+        if (part === websiteName){
+            // Redirect to www.time-shield.com/blocked.html
+            chrome.tabs.update(tabId, {url: "https://www.time-shield.com/blocked.html"});
+            return;
+        }
+    }); */
+
+    Object.keys(blockedWebsites).forEach((value) => {
+        console.log(value); // Log the key
+        if (websiteName === value){
+            chrome.tabs.update(tabId, {url: "https://www.time-shield.com/blocked.html"});
+            return;
+        }
+    });
+
     condition = true;
     timer(websiteName);
 
@@ -78,15 +97,26 @@ async function timer(websiteName) {
     while (condition) {
         await new Promise(resolve => setTimeout(resolve, 1000)); // Sleep 1 sec
         updateTimeSpent(websiteName, 1);
+
+
     }
 }
 
 // Messaging system for extension
 async function startMessager() {
     while (true) {
-        if (websocket === null){
-            // Init web socket
+        if (websocket === null || websocket.readyState === WebSocket.CLOSED) {
             websocket = new WebSocket('ws://localhost:8080');
+        }
+
+        if (websocket) {
+            websocket.onmessage = function(event) {
+                blockedWebsites = {};
+                let parts = event.data.split(',');
+                parts.forEach((part) => {
+                    blockedWebsites[part] = true;
+                });
+            };
         }
 
         await new Promise(resolve => setTimeout(resolve, 5000)); // Sleep 5 sec
@@ -120,10 +150,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message === 'getVisitedWebsites') {
         sendResponse(visitedWebsites);
     }
+    if (message === 'getBlockedWebsites') {
+        sendResponse(blockedWebsites);
+    }
 });
+
+
 
 // Initial load of stored data
 loadVisitedWebsites();
 
 // Start messaging the client
 startMessager();
+
+console.log("STARTED");
