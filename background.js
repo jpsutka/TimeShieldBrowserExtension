@@ -52,6 +52,8 @@ function updateTimeSpent(websiteName, timeSpent) {
 // Listener for tab activation
 chrome.tabs.onActivated.addListener((activeInfo) => {
     chrome.tabs.get(activeInfo.tabId, (tab) => {
+        // Update storage
+        UpdateStorage();
         tabHandler(tab);
     });
 });
@@ -59,6 +61,8 @@ chrome.tabs.onActivated.addListener((activeInfo) => {
 // Listener for tab Update
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (tab.active && changeInfo.url) {
+        // Update storage
+        UpdateStorage();
         tabHandler(tab, tabId);
     }
 });
